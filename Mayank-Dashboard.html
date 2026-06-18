@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Factory Operations Dashboard</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+  :root {
+    --bg:#0f1117; --surface:#1a1d27; --surface2:#22263a; --border:#2e3347;
+    --accent:#4f8ef7; --accent2:#38d9a9; --accent3:#f7934c;
+    --text:#e8eaf0; --text-muted:#7b82a0; --text-dim:#4a5068;
+    --danger:#f05c5c; --radius:10px;
+    --font:'Inter',sans-serif; --mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;font-size:13px;}
+
+  /* SIDEBAR */
+  #sidebar{position:fixed;top:0;left:0;width:220px;height:100vh;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:100;overflow-y:auto;}
+  .sidebar-header{padding:20px 16px 14px;border-bottom:1px solid var(--border);}
+  .sidebar-logo{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:2px;}
+  .sidebar-title{font-size:15px;font-weight:700;color:var(--text);line-height:1.2;}
+  .sidebar-subtitle{font-size:11px;color:var(--text-muted);margin-top:3px;}
+  .nav-section{padding:12px 10px 4px;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);}
+  .nav-item{display:flex;align-items:center;gap:9px;padding:9px 14px;margin:1px 6px;border-radius:7px;cursor:pointer;color:var(--text-muted);font-size:12.5px;font-weight:450;transition:all .15s;border:none;background:none;width:calc(100% - 12px);text-align:left;}
+  .nav-item:hover{background:var(--surface2);color:var(--text);}
+  .nav-item.active{background:rgba(79,142,247,.12);color:var(--accent);font-weight:600;}
+  .status-dot{width:6px;height:6px;border-radius:50%;background:var(--text-dim);margin-left:auto;flex-shrink:0;}
+  .status-dot.loaded{background:var(--accent2);}
+  .status-dot.loading{background:var(--accent3);animation:pulse 1s infinite;}
+  .status-dot.error{background:var(--danger);}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .sidebar-footer{margin-top:auto;padding:12px 14px;border-top:1px solid var(--border);font-size:11px;color:var(--text-dim);}
+
+  /* MAIN */
+  #main{margin-left:220px;min-height:100vh;display:flex;flex-direction:column;}
+  #topbar{position:sticky;top:0;background:rgba(15,17,23,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:10px;z-index:50;flex-wrap:wrap;}
+  #tab-title{font-size:16px;font-weight:700;color:var(--text);flex:1;min-width:120px;}
+  #row-count{font-size:11px;color:var(--text-muted);font-family:var(--mono);background:var(--surface2);padding:4px 10px;border-radius:20px;border:1px solid var(--border);white-space:nowrap;}
+
+  #search-box{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:7px 12px 7px 32px;color:var(--text);font-size:12.5px;font-family:var(--font);width:200px;outline:none;transition:border-color .2s;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237b82a0' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:10px center;}
+  #search-box:focus{border-color:var(--accent);}
+  #search-box::placeholder{color:var(--text-dim);}
+
+  /* DATE FILTER */
+  #date-filter-wrap{position:relative;}
+  #date-filter-btn{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:7px 14px;color:var(--text-muted);font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;font-family:var(--font);white-space:nowrap;transition:all .15s;min-width:90px;justify-content:center;}
+  #date-filter-btn:hover,#date-filter-btn.active{border-color:var(--accent);color:var(--accent);}
+  #date-filter-btn .badge{background:var(--accent);color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;font-weight:600;}
+
+  #date-dropdown{display:none;position:absolute;top:calc(100% + 6px);right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px;z-index:200;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.4);}
+  #date-dropdown.open{display:block;}
+  .dd-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .dd-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);}
+  .dd-clear{font-size:11px;color:var(--accent);cursor:pointer;background:none;border:none;font-family:var(--font);}
+  .dd-clear:hover{text-decoration:underline;}
+  #date-list{max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;}
+  .date-opt{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;transition:background .1s;}
+  .date-opt:hover{background:var(--surface2);}
+  .date-opt input[type=checkbox]{accent-color:var(--accent);width:13px;height:13px;cursor:pointer;}
+  .date-opt label{font-size:12px;color:var(--text);cursor:pointer;font-family:var(--mono);}
+  .no-dates{font-size:12px;color:var(--text-dim);padding:6px 8px;}
+
+  .icon-btn{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:7px 14px;color:var(--text-muted);font-size:12px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;font-family:var(--font);}
+  .icon-btn:hover{background:var(--surface2);color:var(--text);border-color:var(--accent);}
+
+  /* KPI */
+  #kpi-bar{padding:16px 24px 0;display:flex;gap:12px;flex-wrap:wrap;}
+  .kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;min-width:130px;flex:1;max-width:200px;}
+  .kpi-label{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:6px;}
+  .kpi-value{font-size:22px;font-weight:700;font-family:var(--mono);color:var(--text);line-height:1;}
+  .kpi-value.accent{color:var(--accent);} .kpi-value.green{color:var(--accent2);} .kpi-value.orange{color:var(--accent3);}
+
+  /* TABLE */
+  #content{padding:16px 24px 32px;flex:1;}
+  .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  .table-scroll{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  thead tr{background:var(--surface2);border-bottom:1px solid var(--border);}
+  th{padding:10px 14px;text-align:left;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);white-space:nowrap;cursor:pointer;user-select:none;}
+  th:hover{color:var(--text);}
+  th .sort-arrow{opacity:.4;margin-left:4px;font-size:9px;}
+  th.sort-asc .sort-arrow::after{content:'▲';opacity:1;color:var(--accent);}
+  th.sort-desc .sort-arrow::after{content:'▼';opacity:1;color:var(--accent);}
+  th:not(.sort-asc):not(.sort-desc) .sort-arrow::after{content:'⇅';}
+  tbody tr{border-bottom:1px solid var(--border);transition:background .1s;}
+  tbody tr:last-child{border-bottom:none;}
+  tbody tr:hover{background:var(--surface2);}
+  td{padding:9px 14px;color:var(--text);font-family:var(--mono);font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .td-empty{color:var(--text-dim);font-style:italic;font-family:var(--font);}
+
+  /* PAGINATION */
+  #pagination{padding:12px 24px;display:flex;align-items:center;gap:8px;border-top:1px solid var(--border);flex-wrap:wrap;}
+  .page-btn{background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:5px 10px;color:var(--text-muted);font-size:12px;cursor:pointer;transition:all .15s;font-family:var(--font);}
+  .page-btn:hover,.page-btn.active{background:rgba(79,142,247,.15);color:var(--accent);border-color:var(--accent);}
+  .page-btn:disabled{opacity:.3;cursor:not-allowed;}
+  #page-info{font-size:11px;color:var(--text-dim);font-family:var(--mono);margin:0 4px;}
+
+  /* STATES */
+  .state-box{padding:60px 24px;text-align:center;color:var(--text-muted);}
+  .spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 14px;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .state-icon{font-size:28px;margin-bottom:10px;}
+  .state-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px;}
+  .state-sub{font-size:12px;color:var(--text-muted);}
+
+  #init-overlay{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:14px;}
+  #init-overlay .spinner{width:36px;height:36px;}
+  #init-msg{font-size:14px;color:var(--text-muted);}
+
+  ::-webkit-scrollbar{width:5px;height:5px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+  /* ── MOBILE ── */
+  #hamburger{display:none;background:none;border:none;color:var(--text);cursor:pointer;padding:4px;flex-shrink:0;}
+  #sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99;}
+
+  @media(max-width:768px){
+    #sidebar{transform:translateX(-100%);transition:transform .25s ease;width:240px;}
+    #sidebar.open{transform:translateX(0);}
+    #sidebar-overlay.open{display:block;}
+    #main{margin-left:0;}
+    #hamburger{display:flex;align-items:center;justify-content:center;}
+    #topbar{padding:10px 14px;gap:8px;}
+    #tab-title{font-size:14px;}
+    #search-box{width:100%;order:10;flex:1 1 100%;}
+    #date-filter-wrap{order:9;}
+    #row-count{display:none;}
+    #kpi-bar{padding:12px 14px 0;gap:8px;}
+    .kpi-card{min-width:100px;padding:10px 12px;max-width:none;flex:1 1 calc(50% - 8px);}
+    .kpi-value{font-size:18px;}
+    #content{padding:12px 14px 24px;}
+    td,th{padding:8px 10px;font-size:11px;}
+    #date-dropdown{right:auto;left:0;min-width:180px;}
+    #pagination{padding:10px 14px;gap:6px;}
+    .page-btn{padding:6px 10px;font-size:12px;}
+  }
+</style>
+</head>
+<body>
+
+<div id="init-overlay">
+  <div class="spinner"></div>
+  <div id="init-msg">Connecting to Google Sheets…</div>
+  <div id="init-sub" style="font-size:11px;color:var(--text-dim);margin-top:6px">First load may take 5-10 sec</div>
+</div>
+
+<div id="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo">MDF Operations</div>
+    <div class="sidebar-title">Factory Dashboard</div>
+    <div class="sidebar-subtitle" id="sheet-subtitle">Loading…</div>
+  </div>
+  <div class="nav-section">Sheets</div>
+  <div id="nav-list"></div>
+  <div class="sidebar-footer" id="last-updated">—</div>
+</div>
+
+<div id="main">
+  <div id="sidebar-overlay" onclick="closeSidebar()"></div>
+  <div id="topbar">
+    <button id="hamburger" onclick="toggleSidebar()" aria-label="Menu">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <div id="tab-title">—</div>
+    <span id="row-count"></span>
+    <input type="text" id="search-box" placeholder="Search rows…" oninput="applySearch()">
+
+    <!-- DATE FILTER -->
+    <div id="date-filter-wrap">
+      <button id="date-filter-btn" onclick="toggleDateDropdown()">
+        📅 Date <span id="date-badge" class="badge" style="display:none">0</span>
+      </button>
+      <div id="date-dropdown">
+        <div class="dd-header">
+          <span class="dd-title">Filter by Date</span>
+          <button class="dd-clear" onclick="clearDates()">Clear all</button>
+        </div>
+        <div id="date-list"></div>
+      </div>
+    </div>
+
+    <select id="days-select" onchange="changeDays(this.value)" style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text-muted);font-size:12px;font-family:var(--font);cursor:pointer;outline:none;">
+      <option value="7">7 Days</option>
+      <option value="15">15 Days</option>
+      <option value="30">30 Days</option>
+      <option value="60">60 Days</option>
+    </select>
+    <button class="icon-btn" onclick="reloadAll()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+      Refresh
+    </button>
+  </div>
+  <div id="kpi-bar"></div>
+  <div id="content"><div class="state-box"><div class="spinner"></div></div></div>
+</div>
+
+<script>
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyQbB3BobpSsJ6yRzcWJruY8jS99sJM7nNNDPhipNV77-gAGwaeFOnzCxyRj9-Aq-H5rA/exec";
+
+const ICON_MAP = [
+  [/manpower|worker|staff/i,'👷'],[/machine|run|status/i,'⚙️'],[/unload/i,'🚛'],
+  [/meter|reading/i,'🔌'],[/utility|boiler/i,'🔥'],[/china/i,'🏭'],
+  [/production|produce/i,'📦'],[/wastage|waste/i,'⚠️'],[/depositor/i,'🧪'],
+  [/diesel|fuel/i,'⛽'],[/gate|pass/i,'🚧'],[/packing|pack/i,'📫'],
+];
+function iconFor(n){for(const [r,i] of ICON_MAP)if(r.test(n))return i;return'📄';}
+
+// Columns that are pure TIME (1899 epoch artifact from Google Sheets)
+const TIME_ONLY_COLS = [
+  /time/i, /\btime\b/i
+];
+// Date columns used for filtering & sorting (descending default)
+const DATE_COLS = [
+  /date/i, /dt\b/i, /\bday\b/i
+];
+
+function isTimeCol(col){ return TIME_ONLY_COLS.some(r=>r.test(col)); }
+function isDateCol(col){ return DATE_COLS.some(r=>r.test(col)); }
+
+// Fix 1899 time artifact: "30/12/1899 10:33:00" → "10:33 AM"
+function fixCellValue(col, val) {
+  if (val === '' || val == null) return val;
+  const s = String(val);
+
+  // Only pure-time cols (1899 artifact) get time-only treatment. Timestamp shows as-is.
+  if (!(/timestamp/i.test(col)) && isTimeCol(col)) {
+    // Match dd/mm/1899 HH:MM:SS or dd/mm/YYYY HH:MM:SS
+    const m = s.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (m) {
+      // Extract time part only
+      let h = parseInt(m[4]), min = m[5];
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      return `${h}:${min} ${ampm}`;
+    }
+    // Already just time like "10:33:00"
+    const t = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (t) {
+      let h = parseInt(t[1]), min = t[2];
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      return `${h}:${min} ${ampm}`;
+    }
+  }
+  return val;
+}
+
+// Parse a date value to a sortable string "YYYY-MM-DD" or null
+function parseDate(val) {
+  if (!val) return null;
+  const s = String(val).trim();
+  // dd/mm/yyyy
+  const m1 = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m1) return `${m1[3]}-${m1[2]}-${m1[1]}`;
+  // yyyy-mm-dd
+  const m2 = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m2) return `${m2[1]}-${m2[2]}-${m2[3]}`;
+  return null;
+}
+
+// Display-friendly date from sortable key
+function fmtDateDisplay(key) {
+  // key = YYYY-MM-DD
+  const [y,m,d] = key.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+let allData   = {};
+let activeTab = null;
+let sortCol   = null;
+let sortDir   = 1;
+let page      = 1;
+const PAGE_SIZE = 50;
+let filteredRows = [];
+let selectedDates = new Set(); // set of "YYYY-MM-DD" strings
+let dateColName   = null;      // detected date column for active tab
+
+// Close date dropdown on outside click
+document.addEventListener('click', e => {
+  if (!document.getElementById('date-filter-wrap').contains(e.target))
+    document.getElementById('date-dropdown').classList.remove('open');
+});
+
+function toggleDateDropdown() {
+  document.getElementById('date-dropdown').classList.toggle('open');
+}
+
+// ── FETCH ─────────────────────────────────────────────────────
+function fetchAll(forceRefresh=false) {
+  return new Promise((resolve, reject) => {
+    const cb = '_gas_' + Date.now();
+    const s  = document.createElement('script');
+    const t  = setTimeout(() => { cleanup(); reject(new Error('Request timed out')); }, 20000);
+    window[cb] = data => { cleanup(); resolve(data); };
+    s.onerror  = () => { cleanup(); reject(new Error('Script load failed')); };
+    const days = window._dashDays || 7;
+    s.src = GAS_URL + '?callback=' + cb + '&days=' + days + (forceRefresh ? '&refresh=1' : '');
+    document.head.appendChild(s);
+    function cleanup(){ clearTimeout(t); delete window[cb]; s.parentNode && s.parentNode.removeChild(s); }
+  });
+}
+
+// ── INIT ─────────────────────────────────────────────────────
+async function init(forceRefresh=false) {
+  try {
+    let tick = 0;
+    const msgs = ['Connecting to Google Sheets…','Fetching sheet data…','Almost there…','Still loading, please wait…'];
+    const ticker = setInterval(() => {
+      const el = document.getElementById('init-msg');
+      if (el) el.textContent = msgs[Math.min(++tick, msgs.length - 1)];
+    }, 3000);
+    const raw = await fetchAll(forceRefresh);
+    clearInterval(ticker);
+
+    // Apply cell transforms
+    allData = {};
+    for (const [sheet, rows] of Object.entries(raw)) {
+      allData[sheet] = rows.map(row => {
+        const out = {};
+        for (const [col, val] of Object.entries(row)) out[col] = fixCellValue(col, val);
+        return out;
+      });
+    }
+
+    const tabs = Object.keys(allData);
+    if (!tabs.length) throw new Error('No sheets found');
+
+    document.getElementById('sheet-subtitle').textContent = tabs.length + ' sheets';
+    buildNav(tabs);
+    document.getElementById('init-overlay').style.display = 'none';
+    switchTab(tabs[0]);
+    document.getElementById('last-updated').textContent = 'Loaded ' + new Date().toLocaleTimeString('en-IN');
+  } catch(e) {
+    document.getElementById('init-msg').innerHTML =
+      `<span style="color:var(--danger)">⚠ ${e.message}</span><br>
+       <button class="page-btn" onclick="init()" style="margin-top:12px">Retry</button>`;
+  }
+}
+
+async function reloadAll() {
+  allData = {};
+  document.getElementById('init-overlay').style.display = 'flex';
+  document.getElementById('init-msg').textContent = 'Refreshing data…';
+  await init(true);
+}
+
+// ── NAV ───────────────────────────────────────────────────────
+function buildNav(tabs) {
+  const nav = document.getElementById('nav-list');
+  nav.innerHTML = '';
+  tabs.forEach(name => {
+    const btn = document.createElement('button');
+    btn.className = 'nav-item';
+    btn.id = 'nav-' + name;
+    btn.innerHTML = `<span style="font-size:15px">${iconFor(name)}</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</span>
+      <span class="status-dot loaded"></span>`;
+    btn.onclick = () => switchTab(name);
+    nav.appendChild(btn);
+  });
+}
+
+// ── SWITCH TAB ────────────────────────────────────────────────
+function switchTab(name) {
+  activeTab = name;
+  page      = 1;
+  sortCol   = null;
+  sortDir   = 1;
+  selectedDates.clear();
+  document.getElementById('search-box').value = '';
+
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  const nb = document.getElementById('nav-' + name);
+  if (nb) nb.classList.add('active');
+  document.getElementById('tab-title').textContent = iconFor(name) + '  ' + name;
+
+  // Detect date column
+  const rows = allData[name] || [];
+  dateColName = null;
+  if (rows.length) {
+    const cols = Object.keys(rows[0]);
+    dateColName = cols.find(c => isDateCol(c)) || null;
+  }
+
+  // Auto sort descending by date/timestamp col
+  const tsCol = (allData[name]||[]).length ? Object.keys((allData[name]||[{}])[0]).find(c => /timestamp/i.test(c)) : null;
+  if (dateColName) { sortCol = dateColName; sortDir = -1; }
+  else if (tsCol)  { sortCol = tsCol;       sortDir = -1; }
+
+  buildDateFilter();
+  renderTable();
+}
+
+// ── DATE FILTER ───────────────────────────────────────────────
+function buildDateFilter() {
+  const list = document.getElementById('date-list');
+  list.innerHTML = '';
+  selectedDates.clear();
+  updateDateBadge();
+
+  if (!dateColName) {
+    list.innerHTML = '<div class="no-dates">No date column found</div>';
+    return;
+  }
+
+  const rows = allData[activeTab] || [];
+  const uniq = [...new Set(
+    rows.map(r => parseDate(r[dateColName])).filter(Boolean)
+  )].sort((a,b) => b.localeCompare(a)); // newest first
+
+  if (!uniq.length) { list.innerHTML = '<div class="no-dates">No dates found</div>'; return; }
+
+  // Today's key
+  const now = new Date();
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  // For Daily Manpower: auto-select latest date in data; others: auto-select today if exists
+  const latestKey = uniq[0]; // uniq is already sorted desc
+  const latestDateTabs = ['Daily Manpower', 'Unloading', 'Production'];
+  const autoKey = latestDateTabs.includes(activeTab) ? latestKey : (uniq.includes(todayKey) ? todayKey : null);
+
+  uniq.forEach(key => {
+    const div = document.createElement('div');
+    div.className = 'date-opt';
+    const checked = key === autoKey ? 'checked' : '';
+    div.innerHTML = `<input type="checkbox" id="d-${key}" value="${key}" ${checked} onchange="toggleDate('${key}')">
+      <label for="d-${key}">${fmtDateDisplay(key)}</label>`;
+    list.appendChild(div);
+    if (key === autoKey) selectedDates.add(key);
+  });
+  updateDateBadge();
+}
+
+function toggleDate(key) {
+  if (selectedDates.has(key)) selectedDates.delete(key);
+  else selectedDates.add(key);
+  updateDateBadge();
+  page = 1;
+  renderTable();
+}
+
+function clearDates() {
+  selectedDates.clear();
+  document.querySelectorAll('#date-list input[type=checkbox]').forEach(c => c.checked = false);
+  updateDateBadge();
+  page = 1;
+  renderTable();
+}
+
+function updateDateBadge() {
+  const badge = document.getElementById('date-badge');
+  const btn   = document.getElementById('date-filter-btn');
+  if (selectedDates.size > 0) {
+    badge.textContent = selectedDates.size;
+    badge.style.display = 'inline';
+    btn.classList.add('active');
+  } else {
+    badge.style.display = 'none';
+    btn.classList.remove('active');
+  }
+}
+
+function applySearch() { page = 1; renderTable(); }
+
+// ── RENDER ────────────────────────────────────────────────────
+function renderTable() {
+  const rows = allData[activeTab] || [];
+  document.getElementById('kpi-bar').innerHTML = '';
+
+  if (!rows.length) {
+    document.getElementById('content').innerHTML = `<div class="state-box"><div class="state-icon">📭</div><div class="state-title">No data</div><div class="state-sub">This sheet is empty</div></div>`;
+    document.getElementById('row-count').textContent = '0 rows';
+    return;
+  }
+
+  const cols = Object.keys(rows[0]);
+
+  // 1. Date filter
+  let filtered = rows;
+  if (selectedDates.size > 0 && dateColName) {
+    filtered = filtered.filter(r => selectedDates.has(parseDate(r[dateColName])));
+  }
+
+  // 2. Search filter
+  const q = document.getElementById('search-box').value.trim().toLowerCase();
+  if (q) filtered = filtered.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(q)));
+
+  // KPI uses filtered rows so date filter affects totals
+  renderKPI(filtered, cols);
+
+  // 3. Sort
+  if (sortCol) {
+    filtered = [...filtered].sort((a,b) => {
+      const av = a[sortCol], bv = b[sortCol];
+      if (av===''||av==null) return 1;
+      if (bv===''||bv==null) return -1;
+      // Try date sort
+      const ad = parseDate(av), bd = parseDate(bv);
+      if (ad && bd) return sortDir * bd.localeCompare(ad) * -1; // desc = newest first when sortDir=-1
+      const an = parseFloat(String(av).replace(/,/g,'')), bn = parseFloat(String(bv).replace(/,/g,''));
+      if (!isNaN(an)&&!isNaN(bn)) return sortDir*(an-bn);
+      return sortDir*String(av).localeCompare(String(bv));
+    });
+  }
+
+  filteredRows = filtered;
+  const total  = filtered.length;
+  const pages  = Math.max(1, Math.ceil(total/PAGE_SIZE));
+  page = Math.min(page, pages);
+  const start  = (page-1)*PAGE_SIZE;
+  const slice  = filtered.slice(start, start+PAGE_SIZE);
+
+  document.getElementById('row-count').textContent = total + (selectedDates.size ? ` / ${rows.length}` : '') + ' rows';
+
+  // Strip __N suffix → base label: "Operator (MALE)__2" → "Operator (MALE)"
+  function baseCol(col) { return col.replace(/__\d+$/, '').trim(); }
+
+  // Daily Manpower: collapse __N cols → unique base labels, sum numerics per row
+  let displayCols = cols;
+  let displaySlice = slice;
+  if (activeTab === 'Daily Manpower') {
+    const skipRe = /timestamp/i;
+    const seenBase = new Set();
+    displayCols = [];
+    cols.forEach(col => {
+      if (skipRe.test(col)) return;
+      const base = baseCol(col);
+      if (!seenBase.has(base)) { seenBase.add(base); displayCols.push(base); }
+    });
+    displaySlice = slice.map(row => {
+      const out = {};
+      cols.forEach(col => {
+        if (skipRe.test(col)) return;
+        const base = baseCol(col);
+        const v    = row[col];
+        const n    = parseFloat(String(v ?? '').replace(/,/g, ''));
+        if (!(base in out)) out[base] = '';
+        if (!isNaN(n) && n > 0) {
+          const ex = parseFloat(String(out[base]).replace(/,/g, ''));
+          out[base] = (isNaN(ex) ? 0 : ex) + n;
+        } else if (out[base] === '' && v !== '' && v != null) {
+          out[base] = v;
+        }
+      });
+      return out;
+    });
+  }
+
+  let html = `<div class="table-wrap"><div class="table-scroll"><table><thead><tr>`;
+  displayCols.forEach(col => {
+    const cls = sortCol === col ? (sortDir === 1 ? 'sort-asc' : 'sort-desc') : '';
+    html += `<th class="${cls}" onclick="onSort('${col.replace(/'/g, "\'")}')">
+      ${col}<span class="sort-arrow"></span></th>`;
+  });
+  html += `</tr></thead><tbody>`;
+
+  displaySlice.forEach(row => {
+    html += '<tr>';
+    displayCols.forEach(col => {
+      const v = row[col];
+      const d = (v === '' || v == null || v === 0) ? '<span class="td-empty">—</span>' : String(v);
+      html += `<td title="${String(v ?? '').replace(/"/g, '&quot;')}">${d}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += `</tbody></table></div>`;
+
+  if (pages > 1) {
+    html += `<div id="pagination">
+      <button class="page-btn" onclick="goPage(${page-1})" ${page<=1?'disabled':''}>← Prev</button>`;
+    pageRange(page,pages).forEach(p => {
+      if (p==='…') html += `<span style="color:var(--text-dim);padding:0 4px">…</span>`;
+      else html += `<button class="page-btn ${p===page?'active':''}" onclick="goPage(${p})">${p}</button>`;
+    });
+    html += `<button class="page-btn" onclick="goPage(${page+1})" ${page>=pages?'disabled':''}>Next →</button>
+      <span id="page-info">${start+1}–${Math.min(start+PAGE_SIZE,total)} of ${total}</span></div>`;
+  }
+  html += `</div>`;
+  document.getElementById('content').innerHTML = html;
+}
+
+function onSort(col) {
+  if (sortCol===col) sortDir*=-1; else { sortCol=col; sortDir=1; }
+  page=1; renderTable();
+}
+
+function goPage(p) {
+  const pages = Math.ceil(filteredRows.length/PAGE_SIZE);
+  if (p<1||p>pages) return;
+  page=p; renderTable();
+}
+
+function pageRange(cur,total) {
+  if (total<=7) return Array.from({length:total},(_,i)=>i+1);
+  const r=[1];
+  if (cur>3) r.push('…');
+  for(let i=Math.max(2,cur-1);i<=Math.min(total-1,cur+1);i++) r.push(i);
+  if(cur<total-2) r.push('…');
+  r.push(total); return r;
+}
+
+// Per-tab blocked KPI column keywords (case-insensitive substring match)
+const KPI_BLOCK = {
+  'Unloading':          [/driver.*no|driver.*num|billty|bill.*no|total.*qty|qty/i],
+  'Meter Reading':      [/kwh|kvah|md|pf/i],
+  'Utility And Boiler': [/steam.*pressure|pressure.*ach/i],
+  'China Machine':      [/depositor.*run/i],
+  'Depositor':          [/nozzle.*total|total.*qty|qty/i],
+};
+
+function isKpiBlocked(col) {
+  const rules = KPI_BLOCK[activeTab] || [];
+  return rules.some(r => r.test(col));
+}
+
+// ── KPI ───────────────────────────────────────────────────────
+function renderKPI(rows, cols) {
+  if (activeTab === 'Daily Manpower') {
+    renderManpowerKPI(rows, cols);
+    return;
+  }
+  // Generic KPI — skip Timestamp/Date/text cols + per-tab blocked cols
+  const skipRe = /timestamp|date|\bdt\b|time|name|supervisor|shift|remark|reason|source|segment|category/i;
+  const cards = [{label:'Total Rows', value:rows.length, cls:'accent'}];
+  let n = 0;
+  const clss = ['green','orange','accent'];
+  cols.forEach(col => {
+    if (n >= 3 || skipRe.test(col) || isKpiBlocked(col)) return;
+    const vals = rows.map(r=>parseFloat(String(r[col]??'').replace(/,/g,''))).filter(v=>!isNaN(v)&&v!==0);
+    if (vals.length > rows.length * 0.3) {
+      const sum = vals.reduce((a,b)=>a+b,0);
+      const d = sum>=1e6?(sum/1e6).toFixed(1)+'M':sum>=1000?(sum/1000).toFixed(1)+'K':sum%1===0?sum:sum.toFixed(1);
+      cards.push({label: col.slice(0,18), value: d, cls: clss[n++]});
+    }
+  });
+  document.getElementById('kpi-bar').innerHTML = cards.map(c=>
+    `<div class="kpi-card"><div class="kpi-label">${c.label}</div><div class="kpi-value ${c.cls}">${c.value}</div></div>`
+  ).join('');
+}
+
+// ── MANPOWER KPI ──────────────────────────────────────────────
+function renderManpowerKPI(rows, cols) {
+  const skipRe = /timestamp|date|\bdt\b|time|name|supervisor|department|shift|remark/i;
+  const deptCol = cols.find(c => /department/i.test(c)) || null;
+
+  // Collect all unique role names (base, no __N)
+  const roleNames = [];
+  const roleSet = new Set();
+  cols.forEach(col => {
+    if (skipRe.test(col)) return;
+    const role = col.replace(/__\d+$/, '').trim();
+    if (!roleSet.has(role)) { roleSet.add(role); roleNames.push(role); }
+  });
+
+  // deptData[dept][role] = total
+  const deptData = {};
+  const overallRoles = {};
+  let grandTotal = 0;
+
+  rows.forEach(row => {
+    const dept = deptCol ? String(row[deptCol] || 'Unknown').trim() : 'Unknown';
+    if (!deptData[dept]) deptData[dept] = {};
+    cols.forEach(col => {
+      if (skipRe.test(col)) return;
+      const v = parseFloat(String(row[col] ?? '').replace(/,/g, ''));
+      if (!isNaN(v) && v > 0) {
+        const role = col.replace(/__\d+$/, '').trim();
+        deptData[dept][role] = (deptData[dept][role] || 0) + v;
+        overallRoles[role] = (overallRoles[role] || 0) + v;
+        grandTotal += v;
+      }
+    });
+  });
+
+  // Short label for role
+  function shortRole(r) {
+    if (/mistri/i.test(r))                          return 'Mistri';
+    if (/operator.*male|op.*m/i.test(r))            return 'Op. M';
+    if (/operator.*female|op.*f/i.test(r))          return 'Op. F';
+    if (/worker.*male|wkr.*m/i.test(r))             return 'Wkr. M';
+    if (/worker.*female|wkr.*f/i.test(r))           return 'Wkr. F';
+    if (/cleaning/i.test(r))                        return 'Cleaning';
+    if (/wastage/i.test(r))                         return 'Wastage';
+    if (/extra.*male/i.test(r))                     return 'Extra M';
+    if (/extra.*female/i.test(r))                   return 'Extra F';
+    return r.slice(0, 8);
+  }
+
+  const bar = document.getElementById('kpi-bar');
+  // Style: each dept = one card with role breakdown inside
+  let html = '';
+
+  // Overall total card
+  const overallTotal = Object.values(overallRoles).reduce((a,b)=>a+b,0);
+  html += '<div class="kpi-card" style="flex:0 0 auto;min-width:130px">';
+  html += '<div class="kpi-label">Total Staff</div>';
+  html += '<div class="kpi-value accent" style="margin-bottom:8px">' + overallTotal + '</div>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
+  Object.entries(overallRoles).forEach(([role, total]) => {
+    if (total > 0) html += '<span style="font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 8px;color:var(--text-muted)">' + shortRole(role) + ' <b style="color:var(--text);font-size:13px">' + total + '</b></span>';
+  });
+  html += '</div></div>';
+
+  // Per-dept cards
+  const deptClss = ['green','orange','accent','green','orange','accent','green','orange'];
+  Object.entries(deptData).forEach(([dept, roles], i) => {
+    const deptTotal = Object.values(roles).reduce((a,b)=>a+b,0);
+    html += '<div class="kpi-card" style="flex:0 0 auto;min-width:130px">';
+    html += '<div class="kpi-label">' + dept + '</div>';
+    html += '<div class="kpi-value ' + deptClss[i % deptClss.length] + '" style="margin-bottom:8px">' + deptTotal + '</div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
+    Object.entries(roles).forEach(([role, total]) => {
+      if (total > 0) html += '<span style="font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 8px;color:var(--text-muted)">' + shortRole(role) + ' <b style="color:var(--text);font-size:13px">' + total + '</b></span>';
+    });
+    html += '</div></div>';
+  });
+
+  bar.innerHTML = html;
+}
+
+function changeDays(val) {
+  window._dashDays = parseInt(val);
+  reloadAll();
+}
+
+// ── MOBILE SIDEBAR ───────────────────────────────────────────
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('open');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('open');
+}
+// Close sidebar when a nav item is tapped on mobile
+document.getElementById('nav-list').addEventListener('click', () => {
+  if (window.innerWidth <= 768) closeSidebar();
+});
+
+init();
+</script>
+</body>
+</html>
