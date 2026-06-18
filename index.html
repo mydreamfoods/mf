@@ -149,7 +149,7 @@
 
 <div id="sidebar">
   <div class="sidebar-header">
-    <div class="sidebar-logo">Mayank Food Products</div>
+    <div class="sidebar-logo">MDF Operations</div>
     <div class="sidebar-title">Factory Dashboard</div>
     <div class="sidebar-subtitle" id="sheet-subtitle">Loading…</div>
   </div>
@@ -481,6 +481,14 @@ function renderTable() {
   let filtered = rows;
   if (selectedDates.size > 0 && dateColName) {
     filtered = filtered.filter(r => selectedDates.has(parseDate(r[dateColName])));
+  }
+
+  // Machine Run Status: only show MF company rows
+  if (activeTab === 'Machine Run Status') {
+    filtered = filtered.filter(r => {
+      const co = String(r['Company'] ?? '').trim().toUpperCase();
+      return co === 'MF';
+    });
   }
 
   // 2. Search filter
