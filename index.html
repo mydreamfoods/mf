@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MF Factory Operations Dashboard</title>
+<title>Factory Operations Dashboard</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
   :root {
@@ -149,8 +149,8 @@
 
 <div id="sidebar">
   <div class="sidebar-header">
-    <div class="sidebar-logo">MAYANK FOOD PRODUCTS</div>
-    <div class="sidebar-title">MF Factory Dashboard</div>
+    <div class="sidebar-logo">MDF Operations</div>
+    <div class="sidebar-title">Factory Dashboard</div>
     <div class="sidebar-subtitle" id="sheet-subtitle">Loading…</div>
   </div>
   <div class="nav-section">Sheets</div>
@@ -331,6 +331,7 @@ async function init(forceRefresh=false) {
     document.getElementById('sheet-subtitle').textContent = tabs.length + ' sheets';
     buildNav(tabs);
     document.getElementById('init-overlay').style.display = 'none';
+    buildDateFilter();
     switchTab(tabs[0]);
     document.getElementById('last-updated').textContent = 'Loaded ' + new Date().toLocaleTimeString('en-IN');
   } catch(e) {
@@ -369,7 +370,6 @@ function switchTab(name) {
   page      = 1;
   sortCol   = null;
   sortDir   = 1;
-  selectedDates.clear();
   document.getElementById('search-box').value = '';
 
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
@@ -390,47 +390,76 @@ function switchTab(name) {
   if (dateColName) { sortCol = dateColName; sortDir = -1; }
   else if (tsCol)  { sortCol = tsCol;       sortDir = -1; }
 
-  buildDateFilter();
   renderTable();
 }
 
 // ── DATE FILTER ───────────────────────────────────────────────
+// All unique dates across all tabs (built after data loads)
+let allUniqDates = [];
+
 function buildDateFilter() {
   const list = document.getElementById('date-list');
   list.innerHTML = '';
-  selectedDates.clear();
-  updateDateBadge();
 
-  if (!dateColName) {
-    list.innerHTML = '<div class="no-dates">No date column found</div>';
+  // Collect all dates across ALL tabs
+  const dateSet = new Set();
+  Object.keys(allData).forEach(tabName => {
+    const rows = allData[tabName] || [];
+    if (!rows.length) return;
+    const cols = Object.keys(rows[0]);
+    const dc = cols.find(c => isDateCol(c));
+    if (!dc) return;
+    rows.forEach(r => { const d = parseDate(r[dc]); if (d) dateSet.add(d); });
+  });
+
+  allUniqDates = [...dateSet].sort((a,b) => b.localeCompare(a));
+
+  if (!allUniqDates.length) {
+    list.innerHTML = '<div class="no-dates">No dates found</div>';
+    updateDateBadge();
     return;
   }
 
-  const rows = allData[activeTab] || [];
-  const uniq = [...new Set(
-    rows.map(r => parseDate(r[dateColName])).filter(Boolean)
-  )].sort((a,b) => b.localeCompare(a)); // newest first
+  // Auto-select on first load only (selectedDates empty)
+  if (selectedDates.size === 0) {
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    const latestKey = allUniqDates[0];
+    // Default: select today if exists, else latest
+    const autoKey = allUniqDates.includes(todayKey) ? todayKey : latestKey;
+    selectedDates.add(autoKey);
+  }
 
-  if (!uniq.length) { list.innerHTML = '<div class="no-dates">No dates found</div>'; return; }
+  // Select All checkbox
+  const allDiv = document.createElement('div');
+  allDiv.className = 'date-opt';
+  const allChecked = allUniqDates.every(k => selectedDates.has(k)) ? 'checked' : '';
+  allDiv.innerHTML = `<input type="checkbox" id="d-all" ${allChecked} onchange="toggleAllDates(this.checked)">
+    <label for="d-all" style="font-weight:600;color:var(--text)">Select All</label>`;
+  list.appendChild(allDiv);
 
-  // Today's key
-  const now = new Date();
-  const todayKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-  // For Daily Manpower: auto-select latest date in data; others: auto-select today if exists
-  const latestKey = uniq[0]; // uniq is already sorted desc
-  const latestDateTabs = ['Daily Manpower', 'Unloading', 'Production'];
-  const autoKey = latestDateTabs.includes(activeTab) ? latestKey : (uniq.includes(todayKey) ? todayKey : null);
-
-  uniq.forEach(key => {
+  allUniqDates.forEach(key => {
     const div = document.createElement('div');
     div.className = 'date-opt';
-    const checked = key === autoKey ? 'checked' : '';
+    const checked = selectedDates.has(key) ? 'checked' : '';
     div.innerHTML = `<input type="checkbox" id="d-${key}" value="${key}" ${checked} onchange="toggleDate('${key}')">
       <label for="d-${key}">${fmtDateDisplay(key)}</label>`;
     list.appendChild(div);
-    if (key === autoKey) selectedDates.add(key);
   });
   updateDateBadge();
+}
+
+function toggleAllDates(checked) {
+  const boxes = document.querySelectorAll('#date-list input[type=checkbox]:not(#d-all)');
+  selectedDates.clear();
+  boxes.forEach(cb => {
+    cb.checked = checked;
+    if (checked) selectedDates.add(cb.value);
+  });
+  document.getElementById('d-all').checked = checked;
+  updateDateBadge();
+  page = 1;
+  renderTable();
 }
 
 function toggleDate(key) {
@@ -444,6 +473,7 @@ function toggleDate(key) {
 function clearDates() {
   selectedDates.clear();
   document.querySelectorAll('#date-list input[type=checkbox]').forEach(c => c.checked = false);
+  const allBox = document.getElementById('d-all'); if(allBox) allBox.checked = false;
   updateDateBadge();
   page = 1;
   renderTable();
@@ -477,10 +507,14 @@ function renderTable() {
 
   const cols = Object.keys(rows[0]);
 
-  // 1. Date filter
+  // 1. Date filter (global — works across all tabs)
   let filtered = rows;
-  if (selectedDates.size > 0 && dateColName) {
-    filtered = filtered.filter(r => selectedDates.has(parseDate(r[dateColName])));
+  if (selectedDates.size > 0) {
+    const cols0 = rows.length ? Object.keys(rows[0]) : [];
+    const dc = cols0.find(c => isDateCol(c));
+    if (dc) {
+      filtered = filtered.filter(r => selectedDates.has(parseDate(r[dc])));
+    }
   }
 
   // Machine Run Status: only show MF company rows
@@ -684,16 +718,16 @@ function renderManpowerKPI(rows, cols) {
 
   // Short label for role
   function shortRole(r) {
-    if (/mistri/i.test(r))                          return 'Mistri';
-    if (/operator.*male|op.*m/i.test(r))            return 'Op. M';
-    if (/operator.*female|op.*f/i.test(r))          return 'Op. F';
-    if (/worker.*male|wkr.*m/i.test(r))             return 'Wkr. M';
-    if (/worker.*female|wkr.*f/i.test(r))           return 'Wkr. F';
-    if (/cleaning/i.test(r))                        return 'Cleaning';
-    if (/wastage/i.test(r))                         return 'Wastage';
-    if (/extra.*male/i.test(r))                     return 'Extra M';
-    if (/extra.*female/i.test(r))                   return 'Extra F';
-    return r.slice(0, 8);
+    if (/mistri/i.test(r))                           return 'Mistri';
+    if (/operator.*female|op.*fe/i.test(r))          return 'Op. F';
+    if (/operator.*male|op.*ma/i.test(r))            return 'Op. M';
+    if (/worker.*female|wkr.*fe/i.test(r))           return 'Wkr. F';
+    if (/worker.*male|wkr.*ma/i.test(r))             return 'Wkr. M';
+    if (/cleaning/i.test(r))                         return 'Cleaning';
+    if (/wastage/i.test(r))                          return 'Wastage';
+    if (/extra.*female/i.test(r))                    return 'Extra F';
+    if (/extra.*male/i.test(r))                      return 'Extra M';
+    return r.slice(0, 10);
   }
 
   const bar = document.getElementById('kpi-bar');
